@@ -40,8 +40,11 @@
 	},
 	"dependencies": {
 		"bigi": "^1.4.2",
+		"bigint-buffer": "^1.1.5",
+		"chacha": "^2.1.0",
 		"debug": "^4.1.1",
-		"ecurve": "^1.0.6"
+		"ecurve": "^1.0.6",
+		"js-crypto-hkdf": "^0.7.1"
 	},
 	"author": {
 		"name": "Arik Sosman",
