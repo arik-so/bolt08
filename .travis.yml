@@ -1,0 +1,9 @@
+language: node_js
+before_script:
+  - npm run tsc
+node_js:
+  - '10'
+env:
+  global:
+    - NODE_ENV=test
+    - secure: 4iJpDRw7AzZ1yFJBQHooPfBtwsU3wYrUKP+/8q41QOVbXzzvbvA/4/spKOCU0dBKs1zvHq/WZxs4zVfIXnE0aX9x/+bjUkYXgmvCdCuVy+1PGUX7/TP4wVA782iwzbjU9mzjNYWqumggwl0gUJc2nuD4RCiOfwkWetXVtE8pivkiDnMNy1NYMckerHHFQu4erVm8tXWDcxe7xNGuDhKk+JEKRmLdoN7ULOsVEpDwe1JesL4pjvouGkb0otXxiq0a43rN5Is+++szr3ZFqaCQsTpwPvqnXBRlQnBwC8aedWcuv2n+56OUjHYvjYBuvvrludxMWMeNjJP518FvmUaeuWB4SWewSXZTQ/8oxyzm5qF20W4iVKIe6GBf9uDtgFbNE35UCzhSgC6OaSYDhlcpHaGYr1f41kUsApFuuZwwCZ7pCKzLG/UgWfvkwK9fO94Da5fllp+jL8uaItwvByRVnR2eVZtTqDKkQlXIFI4Mqirasjw/tqgarXfnPegopqiSd6i+zEMYXoBF7E/1wkGSN2A+8cpRusJRwGeQ+FhtE2P38mgXQScVPWxynBvcTG8znbERdE2rG1YARQrzgkXWMWVCys3aQt6JNegejrswYjUn9g2hJ4H8rbtCrq+rIIc3Q1+goiDKjkEZm9rNmZBMonhwVxD6WUrcuuk/+x/Uqno=
