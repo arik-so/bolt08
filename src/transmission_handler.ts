@@ -30,19 +30,21 @@ export default class TransmissionHandler {
 		return Buffer.concat([encryptedLength, encryptedMessage]);
 	}
 
-	public receive(undelimitedBuffer: Buffer): Buffer {
+	public receive(undelimitedBuffer: Buffer): { message: Buffer, unreadBuffer: Buffer } {
 		const encryptedLength = undelimitedBuffer.slice(0, 18);
 		const lengthBuffer = Chacha.decrypt(this.receivingKey, BigInt(this.receivingNonce), Buffer.alloc(0), encryptedLength);
 		const length = lengthBuffer.readUInt16BE(0);
 
 		this.incrementReceivingNonce();
 
-		const encryptedMessage = undelimitedBuffer.slice(18, 18 + length + 16);
+		const lastEncryptedDataIndex = 18 + length + 16;
+		const encryptedMessage = undelimitedBuffer.slice(18, lastEncryptedDataIndex);
 		const message = Chacha.decrypt(this.receivingKey, BigInt(this.receivingNonce), Buffer.alloc(0), encryptedMessage);
 
 		this.incrementReceivingNonce();
 
-		return message;
+		const unreadBuffer = undelimitedBuffer.slice(lastEncryptedDataIndex);
+		return {message, unreadBuffer};
 	}
 
 	private incrementSendingNonce() {

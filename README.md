@@ -147,7 +147,7 @@ function processIncomingData(data) {
 	if (transmissionHandler instanceof TransmissionHandler) {
 		const decryptedResponse = transmissionHandler.receive(inputData);
 		console.log('Decrypted:');
-		console.log(decryptedResponse.toString('hex'));
+		console.log(decryptedResponse.message.toString('hex'));
 	} else {
 		const output = handshakeHandler.actDynamically({incomingBuffer: inputData});
 		if (output.responseBuffer && output.responseBuffer.length > 0) {
@@ -249,7 +249,7 @@ function processIncomingData(data, client: Socket) {
 	if (transmissionHandler instanceof TransmissionHandler) {
 		const decryptedResponse = transmissionHandler.receive(inputData);
 		console.log('Decrypted:');
-		console.log(decryptedResponse.toString('hex'));
+		console.log(decryptedResponse.message.toString('hex'));
 	} else {
 		const output = handshakeHandler.actDynamically({role: Role.RECEIVER, incomingBuffer: inputData});
 		if (output.responseBuffer && output.responseBuffer.length > 0) {

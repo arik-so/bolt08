@@ -99,7 +99,8 @@ describe('Handshake Tests', () => {
 			const randomMessage = crypto.randomBytes(100);
 			const encryptedMessage = receiverTxHandler.send(randomMessage);
 			const receivedMessage = senderTxHandler.receive(encryptedMessage);
-			assert.equal(randomMessage.toString('hex'), receivedMessage.toString('hex'));
+			assert.equal(randomMessage.toString('hex'), receivedMessage.message.toString('hex'));
+			assert.equal(receivedMessage.unreadBuffer.length, 0);
 		}
 	});
 
@@ -187,7 +188,8 @@ describe('Handshake Tests', () => {
 			const randomMessage = crypto.randomBytes(100);
 			const encryptedMessage = receiverTxHandler.send(randomMessage);
 			const receivedMessage = senderTxHandler.receive(encryptedMessage);
-			assert.equal(randomMessage.toString('hex'), receivedMessage.toString('hex'));
+			assert.equal(randomMessage.toString('hex'), receivedMessage.message.toString('hex'));
+			assert.equal(receivedMessage.unreadBuffer.length, 0);
 		}
 	});
 
