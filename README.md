@@ -290,7 +290,7 @@ server.listen(port, '127.0.0.1');
 Now we initiate the handshake using `lncli`.
 
 ```shell script
-lncli connect 036360e856310ce5d294e8be33fc807077dc56ac80d95d9cd4ddbd21325eff73f7@127.0.0.1:10154
+lncli connect 036360e856310ce5d294e8be33fc807077dc56ac80d95d9cd4ddbd21325eff73f7@127.0.0.1:1337
 ```
 
 The output from Node might then look something like this:
