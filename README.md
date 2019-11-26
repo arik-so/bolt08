@@ -28,7 +28,7 @@ However, if you are comfortable with lending the tool some autonomy, you can sim
 
 ```typescript
 const output = handshakeHandler.actDynamically({
-	role: Role.RECEIVER,
+	role: Role.RECEIVER, // only necessary on first call
 	incomingBuffer: inputData, // do not set for first message
 	remotePublicKey: publicKey, // only necessary for handshake initiation
 	ephemeralPrivateKey: ephemeralPrivateKey // optional
