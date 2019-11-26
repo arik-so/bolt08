@@ -35,7 +35,7 @@ export default class Handshake {
 	private temporaryKeys: Buffer[] = [];
 
 	private hash: HandshakeHash;
-	private chainKey: Buffer;
+	private chainingKey: Buffer;
 
 	private txHandler: TransmissionHandler;
 
@@ -48,9 +48,9 @@ export default class Handshake {
 
 		// initialize handshake hash
 		const protocolName = Buffer.from('Noise_XK_secp256k1_ChaChaPoly_SHA256', 'ascii');
-		this.chainKey = crypto.createHash('sha256').update(protocolName).digest();
+		this.chainingKey = crypto.createHash('sha256').update(protocolName).digest();
 		const prologue = Buffer.from('lightning', 'ascii');
-		this.hash = new HandshakeHash(Buffer.concat([this.chainKey, prologue]));
+		this.hash = new HandshakeHash(Buffer.concat([this.chainingKey, prologue]));
 	}
 
 	public get transmissionHandler(): TransmissionHandler {
@@ -140,17 +140,17 @@ export default class Handshake {
 			publicKey: this.remoteEphemeralKey
 		});
 
-		const derivative = await Handshake.hkdf(this.chainKey, sharedSecret);
-		this.chainKey = derivative.slice(0, 32);
+		const derivative = await Handshake.hkdf(this.chainingKey, sharedSecret);
+		this.chainingKey = derivative.slice(0, 32);
 		this.temporaryKeys[2] = derivative.slice(32);
 
 		const tag = Handshake.encryptWithAD(this.temporaryKeys[2], BigInt(0), this.hash.value, Buffer.alloc(0));
 
-		const transmissionKeys = await Handshake.hkdf(this.chainKey, Buffer.alloc(0));
+		const transmissionKeys = await Handshake.hkdf(this.chainingKey, Buffer.alloc(0));
 		const sendingKey = transmissionKeys.slice(0, 32);
 		const receivingKey = transmissionKeys.slice(32);
 
-		this.txHandler = new TransmissionHandler({sendingKey, receivingKey});
+		this.txHandler = new TransmissionHandler({sendingKey, receivingKey, chainingKey: this.chainingKey});
 
 		return Buffer.concat([Buffer.alloc(1, 0), chacha, tag]);
 	}
@@ -178,18 +178,18 @@ export default class Handshake {
 			publicKey: this.remotePublicKey
 		});
 
-		const derivative = await Handshake.hkdf(this.chainKey, sharedSecret);
-		this.chainKey = derivative.slice(0, 32);
+		const derivative = await Handshake.hkdf(this.chainingKey, sharedSecret);
+		this.chainingKey = derivative.slice(0, 32);
 		this.temporaryKeys[2] = derivative.slice(32);
 
 		// make sure the tag checks out
 		Handshake.decryptWithAD(this.temporaryKeys[2], BigInt(0), this.hash.value, tag);
 
-		const transmissionKeys = await Handshake.hkdf(this.chainKey, Buffer.alloc(0));
+		const transmissionKeys = await Handshake.hkdf(this.chainingKey, Buffer.alloc(0));
 		const receivingKey = transmissionKeys.slice(0, 32);
 		const sendingKey = transmissionKeys.slice(32);
 
-		this.txHandler = new TransmissionHandler({sendingKey, receivingKey});
+		this.txHandler = new TransmissionHandler({sendingKey, receivingKey, chainingKey: this.chainingKey});
 	}
 
 	private async serializeActMessage({actIndex, ephemeralPrivateKey, peerPublicKey}: { actIndex: number, ephemeralPrivateKey: Bigi, peerPublicKey: Point }) {
@@ -203,8 +203,8 @@ export default class Handshake {
 			publicKey: peerPublicKey
 		});
 
-		const derivative = await Handshake.hkdf(this.chainKey, sharedEphemeralSecret);
-		this.chainKey = derivative.slice(0, 32);
+		const derivative = await Handshake.hkdf(this.chainingKey, sharedEphemeralSecret);
+		this.chainingKey = derivative.slice(0, 32);
 		const temporaryKey = derivative.slice(32);
 		this.temporaryKeys[actIndex] = temporaryKey;
 
@@ -234,8 +234,8 @@ export default class Handshake {
 			publicKey: peerPublicKey
 		});
 
-		const derivative = await Handshake.hkdf(this.chainKey, sharedEphemeralSecret);
-		this.chainKey = derivative.slice(0, 32);
+		const derivative = await Handshake.hkdf(this.chainingKey, sharedEphemeralSecret);
+		this.chainingKey = derivative.slice(0, 32);
 		const temporaryKey = derivative.slice(32);
 		this.temporaryKeys[actIndex] = temporaryKey;
 
@@ -251,7 +251,7 @@ export default class Handshake {
 		return sharedSecret;
 	}
 
-	private static async hkdf(salt: Buffer, ikm: Buffer): Promise<Buffer> {
+	public static async hkdf(salt: Buffer, ikm: Buffer): Promise<Buffer> {
 		const derivative = await hkdf.compute(ikm, 'SHA-256', 64, '', salt);
 		return Buffer.from(derivative.key);
 	}
@@ -263,7 +263,7 @@ export default class Handshake {
 	 * @param associatedData
 	 * @param plaintext
 	 */
-	private static encryptWithAD(key: Buffer, nonce: bigint, associatedData: Buffer, plaintext: Buffer): Buffer {
+	public static encryptWithAD(key: Buffer, nonce: bigint, associatedData: Buffer, plaintext: Buffer): Buffer {
 		const encodedNonce = Buffer.alloc(12, 0);
 		// encode the nonce value as a little endian into the last 64 bits
 		bigintBuffer.toBufferLE(nonce, 8).copy(encodedNonce, 4);
@@ -283,7 +283,7 @@ export default class Handshake {
 	 * @param associatedData
 	 * @param ciphertext
 	 */
-	private static decryptWithAD(key: Buffer, nonce: bigint, associatedData: Buffer, ciphertext: Buffer): Buffer {
+	public static decryptWithAD(key: Buffer, nonce: bigint, associatedData: Buffer, ciphertext: Buffer): Buffer {
 		const encodedNonce = Buffer.alloc(12, 0);
 		// encode the nonce value as a little endian into the last 64 bits
 		bigintBuffer.toBufferLE(nonce, 8).copy(encodedNonce, 4);
