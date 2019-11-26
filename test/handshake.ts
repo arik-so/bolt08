@@ -81,9 +81,7 @@ describe('Handshake Tests', () => {
 
 			// RECEIVE
 			{
-				// the roles are flipped
-
-				// await receiverHandshake.processActOne(actOneMessage);
+				await receiverHandshake.processActThree(actThreeMessage);
 				// assert.equal(receiverHandshake['hash'].value.toString('hex'), '9d1ffbb639e7e20021d9259491dc7b160aab270fb1339ef135053f6f2cebe9ce');
 			}
 		}

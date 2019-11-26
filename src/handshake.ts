@@ -143,6 +143,41 @@ export default class Handshake {
 		return Buffer.concat([Buffer.alloc(1, 0), chacha, tag]);
 	}
 
+	public async processActThree(actThreeMessage: Buffer) {
+		this.assertRole(Role.RECEIVER);
+
+		if (actThreeMessage.length != 66) {
+			throw new Error('act one/two message must be 50 bytes');
+		}
+		const version = actThreeMessage.readUInt8(0);
+		if (version !== 0) {
+			throw new Error('unsupported version');
+		}
+
+		const chacha = actThreeMessage.slice(1, 50);
+		const tag = actThreeMessage.slice(50, 66);
+
+		const remotePublicKey = Handshake.decryptWithAD(this.temporaryKeys[1], BigInt(1), this.hash.value, chacha);
+		this.remotePublicKey = Point.decodeFrom(secp256k1, remotePublicKey);
+
+		this.hash.update(chacha);
+		const sharedSecret = Handshake.ecdh({
+			privateKey: this.ephemeralPrivateKey,
+			publicKey: this.remotePublicKey
+		});
+
+		const derivative = await Handshake.hkdf(this.chainKey, sharedSecret);
+		this.chainKey = derivative.slice(0, 32);
+		this.temporaryKeys[2] = derivative.slice(32);
+
+		// make sure the tag checks out
+		Handshake.decryptWithAD(this.temporaryKeys[2], BigInt(0), this.hash.value, tag);
+
+		const transmissionKeys = await Handshake.hkdf(this.chainKey, Buffer.alloc(0));
+		const receivingKey = transmissionKeys.slice(0, 32);
+		const sendingKey = transmissionKeys.slice(32);
+	}
+
 	private async serializeActMessage({actIndex, ephemeralPrivateKey, peerPublicKey}: { actIndex: number, ephemeralPrivateKey: Bigi, peerPublicKey: Point }) {
 		const ephemeralPublicKey = secp256k1.G.multiply(ephemeralPrivateKey);
 		this.ephemeralPrivateKey = ephemeralPrivateKey;
