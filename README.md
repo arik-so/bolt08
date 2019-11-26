@@ -10,6 +10,36 @@ A utility for interfacing with the TCP-based networking protocol outlined in Lig
 npm install bolt08
 ```
 
+## Usage
+
+In the examples below, each act is serialized and processed separately, with methods such as
+
+```typescript
+handshakeHandler.serializeActOne({remotePublicKey});
+```
+
+or
+
+```typescript
+handshakeHandler.processActTwo(incomingActTwo);
+```
+
+However, if you are comfortable with lending the tool some autonomy, you can simply use
+
+```typescript
+const output = handshakeHandler.actDynamically({role: Role.RECEIVER, incomingBuffer: inputData});
+```
+
+Where `output` will have the properties `responseBuffer`, `unreadBuffer`, and `transmissionHandler`.
+
+If `responseBuffer` is non-empty, you still need to send a message to your peer.
+
+If `unreadBuffer` is non-empty, you have only processed a portion of the incoming message, 
+and should be aware of that when you deal with remaining binary buffers.
+
+If `transmissionHandler` is set, you are now equipped to use it to send and receive regular, post-handshake
+messages. Key rotations will be taken care of automatically.
+
 ## Example
 
 ### Initiate Handshake
