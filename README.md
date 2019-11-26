@@ -15,7 +15,7 @@ npm install bolt08
 ### Initiate Handshake
 
 ```typescript
-import Handshake from 'bolt08';
+import {Handshake} from 'bolt08';
 import * as crypto from 'crypto';
 
 // we initialize a new node instance with a local private key
@@ -45,7 +45,7 @@ const serializedMessage = transmissionHandler.send(message); // serializedMessag
 ### Respond to Handshake
 
 ```typescript
-import Handshake from 'bolt08';
+import {Handshake} from 'bolt08';
 import * as crypto from 'crypto';
 
 // we initialize a new node instance with a local private key

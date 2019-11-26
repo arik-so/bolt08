@@ -10,7 +10,7 @@ import Chacha from './chacha';
 const debug = debugModule('bolt08:handshake');
 const secp256k1 = ecurve.getCurveByName('secp256k1');
 
-enum Role {
+export enum Role {
 	INITIATOR,
 	RECEIVER
 }
@@ -21,6 +21,7 @@ enum Role {
 export default class Handshake {
 
 	private role?: Role;
+	private nextActIndex: number = -1;
 
 	private privateKey: Bigi;
 	private publicKey: Point;
@@ -52,6 +53,78 @@ export default class Handshake {
 		this.hash = new HandshakeHash(Buffer.concat([this.chainingKey, prologue]));
 	}
 
+	public actDynamically({role, incomingBuffer, ephemeralPrivateKey, remotePublicKey}: { role?: Role, incomingBuffer?: Buffer, ephemeralPrivateKey?: Buffer, remotePublicKey?: Buffer }): { responseBuffer?: Buffer, transmissionHandler?: TransmissionHandler } {
+		if (!(this.role in Role)) {
+			if (!(role in Role)) {
+				throw new Error('invalid role');
+			}
+
+			this.assumeRole(role);
+			this.nextActIndex = 0;
+		}
+
+		let responseBuffer: Buffer = null;
+		let txHander: TransmissionHandler;
+
+		// we generate a local, static ephemeral private key
+		if (!this.ephemeralPrivateKey) {
+			if (!ephemeralPrivateKey) {
+				ephemeralPrivateKey = crypto.randomBytes(32);
+			}
+			this.ephemeralPrivateKey = Bigi.fromBuffer(ephemeralPrivateKey);
+		}
+
+		if (this.nextActIndex === 0) {
+			if (this.role === Role.INITIATOR) {
+				// we are starting the communication
+
+				if (!remotePublicKey) {
+					throw new Error('remote public key must be known to initiate handshake');
+				}
+
+				responseBuffer = this.serializeActOne({
+					ephemeralPrivateKey: this.ephemeralPrivateKey.toBuffer(32),
+					remotePublicKey: remotePublicKey
+				});
+
+				this.nextActIndex = 1; // next step: process incoming act two
+			} else {
+				if (!incomingBuffer) {
+					throw new Error('incoming message must be known to receive handshake');
+				}
+				this.processActOne(incomingBuffer);
+
+				responseBuffer = this.serializeActTwo({ephemeralPrivateKey: this.ephemeralPrivateKey.toBuffer(32)});
+
+				this.nextActIndex = 2; // next step: process incoming act three
+			}
+
+		} else if (this.nextActIndex === 1 && this.role === Role.INITIATOR) {
+			if (!incomingBuffer) {
+				throw new Error('incoming message must be known to receive handshake');
+			}
+			this.processActTwo(incomingBuffer);
+
+			responseBuffer = this.serializeActThree();
+			txHander = this.transmissionHandler;
+			this.nextActIndex = -1; // we are done
+		} else if (this.nextActIndex === 2 && this.role === Role.RECEIVER) {
+			if (!incomingBuffer) {
+				throw new Error('incoming message must be known to receive handshake');
+			}
+			this.processActThree(incomingBuffer);
+			txHander = this.transmissionHandler;
+			this.nextActIndex = -1; // we are done
+		} else {
+			throw new Error('invalid state!');
+		}
+
+		return {
+			responseBuffer,
+			transmissionHandler: txHander
+		};
+	}
+
 	public get transmissionHandler(): TransmissionHandler {
 		if (!this.txHandler) {
 			throw new Error('act 3 must be completed before a transmission handler is available');
@@ -61,6 +134,9 @@ export default class Handshake {
 
 	private assumeRole(role: Role) {
 		if (this.role in Role) {
+			if (role === this.role) {
+				return; // nothing is changing
+			}
 			throw new Error('roles cannot change!');
 		}
 		this.role = role;
