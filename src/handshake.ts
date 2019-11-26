@@ -4,9 +4,9 @@ import chacha = require('chacha');
 import debugModule = require('debug');
 import ecurve = require('ecurve');
 import * as crypto from 'crypto';
-import hkdf from 'js-crypto-hkdf';
 import {Point} from 'ecurve';
 import TransmissionHandler from './transmission_handler';
+import HKDF from './hkdf';
 
 const debug = debugModule('bolt08:handshake');
 const secp256k1 = ecurve.getCurveByName('secp256k1');
@@ -73,7 +73,7 @@ export default class Handshake {
 		}
 	}
 
-	public async serializeActOne({ephemeralPrivateKey = null, remotePublicKey}: { ephemeralPrivateKey?: Buffer, remotePublicKey: Buffer }): Promise<Buffer> {
+	public serializeActOne({ephemeralPrivateKey = null, remotePublicKey}: { ephemeralPrivateKey?: Buffer, remotePublicKey: Buffer }): Buffer {
 		this.assumeRole(Role.INITIATOR);
 		this.remotePublicKey = Point.decodeFrom(secp256k1, remotePublicKey);
 		this.hash.update(this.remotePublicKey.getEncoded(true));
@@ -90,18 +90,18 @@ export default class Handshake {
 		});
 	}
 
-	public async processActOne(actOneMessage: Buffer) {
+	public processActOne(actOneMessage: Buffer) {
 		this.assumeRole(Role.RECEIVER);
 		this.hash.update(this.publicKey.getEncoded(true));
 
-		this.remoteEphemeralKey = await this.processActMessage({
+		this.remoteEphemeralKey = this.processActMessage({
 			actIndex: 0,
 			message: actOneMessage,
 			localPrivateKey: this.privateKey
 		});
 	}
 
-	public async serializeActTwo({ephemeralPrivateKey = null}: { ephemeralPrivateKey?: Buffer }): Promise<Buffer> {
+	public serializeActTwo({ephemeralPrivateKey = null}: { ephemeralPrivateKey?: Buffer }): Buffer {
 		this.assertRole(Role.RECEIVER);
 
 		if (!ephemeralPrivateKey) {
@@ -116,16 +116,16 @@ export default class Handshake {
 		});
 	}
 
-	public async processActTwo(actTwoMessage: Buffer) {
+	public processActTwo(actTwoMessage: Buffer) {
 		this.assertRole(Role.INITIATOR);
-		this.remoteEphemeralKey = await this.processActMessage({
+		this.remoteEphemeralKey = this.processActMessage({
 			actIndex: 1,
 			message: actTwoMessage,
 			localPrivateKey: this.ephemeralPrivateKey
 		});
 	}
 
-	public async serializeActThree(): Promise<Buffer> {
+	public serializeActThree(): Buffer {
 		this.assertRole(Role.INITIATOR);
 
 		// do the stuff here
@@ -140,13 +140,13 @@ export default class Handshake {
 			publicKey: this.remoteEphemeralKey
 		});
 
-		const derivative = await Handshake.hkdf(this.chainingKey, sharedSecret);
+		const derivative = Handshake.hkdf(this.chainingKey, sharedSecret);
 		this.chainingKey = derivative.slice(0, 32);
 		this.temporaryKeys[2] = derivative.slice(32);
 
 		const tag = Handshake.encryptWithAD(this.temporaryKeys[2], BigInt(0), this.hash.value, Buffer.alloc(0));
 
-		const transmissionKeys = await Handshake.hkdf(this.chainingKey, Buffer.alloc(0));
+		const transmissionKeys = Handshake.hkdf(this.chainingKey, Buffer.alloc(0));
 		const sendingKey = transmissionKeys.slice(0, 32);
 		const receivingKey = transmissionKeys.slice(32);
 
@@ -155,7 +155,7 @@ export default class Handshake {
 		return Buffer.concat([Buffer.alloc(1, 0), chacha, tag]);
 	}
 
-	public async processActThree(actThreeMessage: Buffer) {
+	public processActThree(actThreeMessage: Buffer) {
 		this.assertRole(Role.RECEIVER);
 
 		if (actThreeMessage.length != 66) {
@@ -178,21 +178,21 @@ export default class Handshake {
 			publicKey: this.remotePublicKey
 		});
 
-		const derivative = await Handshake.hkdf(this.chainingKey, sharedSecret);
+		const derivative = Handshake.hkdf(this.chainingKey, sharedSecret);
 		this.chainingKey = derivative.slice(0, 32);
 		this.temporaryKeys[2] = derivative.slice(32);
 
 		// make sure the tag checks out
 		Handshake.decryptWithAD(this.temporaryKeys[2], BigInt(0), this.hash.value, tag);
 
-		const transmissionKeys = await Handshake.hkdf(this.chainingKey, Buffer.alloc(0));
+		const transmissionKeys = Handshake.hkdf(this.chainingKey, Buffer.alloc(0));
 		const receivingKey = transmissionKeys.slice(0, 32);
 		const sendingKey = transmissionKeys.slice(32);
 
 		this.txHandler = new TransmissionHandler({sendingKey, receivingKey, chainingKey: this.chainingKey});
 	}
 
-	private async serializeActMessage({actIndex, ephemeralPrivateKey, peerPublicKey}: { actIndex: number, ephemeralPrivateKey: Bigi, peerPublicKey: Point }) {
+	private serializeActMessage({actIndex, ephemeralPrivateKey, peerPublicKey}: { actIndex: number, ephemeralPrivateKey: Bigi, peerPublicKey: Point }) {
 		const ephemeralPublicKey = secp256k1.G.multiply(ephemeralPrivateKey);
 		this.ephemeralPrivateKey = ephemeralPrivateKey;
 		this.ephemeralPublicKey = ephemeralPublicKey;
@@ -203,7 +203,7 @@ export default class Handshake {
 			publicKey: peerPublicKey
 		});
 
-		const derivative = await Handshake.hkdf(this.chainingKey, sharedEphemeralSecret);
+		const derivative = Handshake.hkdf(this.chainingKey, sharedEphemeralSecret);
 		this.chainingKey = derivative.slice(0, 32);
 		const temporaryKey = derivative.slice(32);
 		this.temporaryKeys[actIndex] = temporaryKey;
@@ -214,7 +214,7 @@ export default class Handshake {
 		return Buffer.concat([Buffer.alloc(1, 0), this.ephemeralPublicKey.getEncoded(true), chachaTag]);
 	}
 
-	private async processActMessage({actIndex, message, localPrivateKey}: { actIndex: number, message: Buffer, localPrivateKey: Bigi }): Promise<Point> {
+	private processActMessage({actIndex, message, localPrivateKey}: { actIndex: number, message: Buffer, localPrivateKey: Bigi }): Point {
 		if (message.length != 50) {
 			throw new Error('act one/two message must be 50 bytes');
 		}
@@ -234,7 +234,7 @@ export default class Handshake {
 			publicKey: peerPublicKey
 		});
 
-		const derivative = await Handshake.hkdf(this.chainingKey, sharedEphemeralSecret);
+		const derivative = Handshake.hkdf(this.chainingKey, sharedEphemeralSecret);
 		this.chainingKey = derivative.slice(0, 32);
 		const temporaryKey = derivative.slice(32);
 		this.temporaryKeys[actIndex] = temporaryKey;
@@ -251,9 +251,8 @@ export default class Handshake {
 		return sharedSecret;
 	}
 
-	public static async hkdf(salt: Buffer, ikm: Buffer): Promise<Buffer> {
-		const derivative = await hkdf.compute(ikm, 'SHA-256', 64, '', salt);
-		return Buffer.from(derivative.key);
+	public static hkdf(salt: Buffer, ikm: Buffer): Buffer {
+		return HKDF.derive(salt, ikm);
 	}
 
 	/**
