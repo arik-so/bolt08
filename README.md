@@ -24,7 +24,7 @@ or
 handshakeHandler.processActTwo(incomingActTwo);
 ```
 
-However, if you are comfortable with lending the tool some autonomy, you can simply use
+However, if you are comfortable with lending the tool some autonomy, you can simply repeatedly call
 
 ```typescript
 const output = handshakeHandler.actDynamically({
