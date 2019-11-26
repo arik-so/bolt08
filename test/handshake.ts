@@ -76,7 +76,7 @@ describe('Handshake Tests', () => {
 			// SEND
 			{
 				actThreeMessage = await senderHandshake.serializeActThree();
-				// assert.equal(actOneMessage.toString('hex'), '00036360e856310ce5d294e8be33fc807077dc56ac80d95d9cd4ddbd21325eff73f70df6086551151f58b8afe6c195782c6a');
+				assert.equal(actThreeMessage.toString('hex'), '00b9e3a702e93e3a9948c2ed6e5fd7590a6e1c3a0344cfc9d5b57357049aa22355361aa02e55a8fc28fef5bd6d71ad0c38228dc68b1c466263b47fdf31e560e139ba');
 			}
 
 			// RECEIVE

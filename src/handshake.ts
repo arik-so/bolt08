@@ -123,7 +123,24 @@ export default class Handshake {
 		const chacha = Handshake.encryptWithAD(temporaryKey, BigInt(1), this.hash.value, this.publicKey.getEncoded(true));
 		debug('Act 3 chacha: %s', chacha.toString('hex'));
 
-		return Buffer.alloc(0);
+		this.hash.update(chacha);
+
+		const sharedSecret = Handshake.ecdh({
+			privateKey: this.privateKey,
+			publicKey: this.remoteEphemeralKey
+		});
+
+		const derivative = await Handshake.hkdf(this.chainKey, sharedSecret);
+		this.chainKey = derivative.slice(0, 32);
+		this.temporaryKeys[2] = derivative.slice(32);
+
+		const tag = Handshake.encryptWithAD(this.temporaryKeys[2], BigInt(0), this.hash.value, Buffer.alloc(0));
+
+		const transmissionKeys = await Handshake.hkdf(this.chainKey, Buffer.alloc(0));
+		const sendingKey = transmissionKeys.slice(0, 32);
+		const receivingKey = transmissionKeys.slice(32);
+
+		return Buffer.concat([Buffer.alloc(1, 0), chacha, tag]);
 	}
 
 	private async serializeActMessage({actIndex, ephemeralPrivateKey, peerPublicKey}: { actIndex: number, ephemeralPrivateKey: Bigi, peerPublicKey: Point }) {
