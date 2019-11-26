@@ -67,11 +67,126 @@ const message = Buffer.from('Welcome!', 'ascii');
 const serializedMessage = transmissionHandler.send(message); // serializedMessage is what we send over TCP
 ```
 
-### Dynamically Process and Decrypt
+### Interact with an LND Node
 
 You can set up a local TCP server with node and test the connection with a real Lightning node.
 For this setup, we're gonna use a local public key `036360e856310ce5d294e8be33fc807077dc56ac80d95d9cd4ddbd21325eff73f7`,
 and we will initiate the handshake using `lncli`.
+
+#### Initiate Handshake to LND
+
+First, we need to run LND
+
+```shell script
+lnd
+```
+
+Assuming regtest and an unlocked wallet, let's also extract our identity pubkey
+
+```shell script
+lncli -n regtest getinfo
+```
+
+In my case, it was `03c8f10269ebe6f67a703b7d934b10592f0a05f83c83571524a3771f5f921b8d3a`, so let's initiate the handshake.
+
+```typescript
+import * as net from 'net';
+import {Handshake, Role, TransmissionHandler} from 'bolt08';
+import * as crypto from 'crypto';
+
+const localPrivateKey = crypto.randomBytes(32);
+const remotePublicKey = Buffer.from('03c8f10269ebe6f67a703b7d934b10592f0a05f83c83571524a3771f5f921b8d3a', 'hex');
+
+const client = new net.Socket();
+
+const handshakeHandler = new Handshake({privateKey: localPrivateKey});
+let transmissionHandler: TransmissionHandler;
+let pendingData = Buffer.alloc(0);
+
+function processIncomingData(data) {
+	// there is some unprocessed data that we will prepend to the newly received data for processing
+	const inputData = Buffer.concat([pendingData, data]);
+	pendingData = Buffer.alloc(0);
+
+	console.log('Processing:');
+	console.log(inputData.toString('hex'));
+
+	if (transmissionHandler instanceof TransmissionHandler) {
+		const decryptedResponse = transmissionHandler.receive(inputData);
+		console.log('Decrypted:');
+		console.log(decryptedResponse.toString('hex'));
+	} else {
+		const output = handshakeHandler.actDynamically({incomingBuffer: inputData});
+		if (output.responseBuffer && output.responseBuffer.length > 0) {
+			const response = output.responseBuffer;
+
+			console.log('Responding:');
+			console.log(response.toString('hex'));
+			client.write(response)
+		}
+		if (output.transmissionHandler && output.transmissionHandler instanceof TransmissionHandler) {
+			transmissionHandler = output.transmissionHandler;
+		}
+		if (output.unreadBuffer && output.unreadBuffer.length > 0) {
+			pendingData = output.unreadBuffer;
+			// let's immediately process the remaining data in this case
+			processIncomingData(Buffer.alloc(0));
+		}
+	}
+}
+
+client.connect(9735, '127.0.0.1', () => {
+	console.log('connected');
+	const firstActOutput = handshakeHandler.actDynamically({
+		role: Role.INITIATOR,
+		remotePublicKey
+	});
+	const firstMessage = firstActOutput.responseBuffer;
+	console.log('First message:');
+	console.log(firstMessage.toString('hex'));
+	client.write(firstMessage);
+});
+
+client.on('data', (data) => {
+	console.log('Received:');
+	console.log(data.toString('hex'));
+	processIncomingData(data);
+});
+
+client.on('error', (error) => {
+	console.log('Error:');
+	console.log(error);
+});
+
+client.on('close', function () {
+	console.log('Connection closed');
+});
+```
+
+The output might look something like this:
+
+> First message:
+> 00039d4e60cd8dd41a2d008e06a114921af1932eb6ab7d50beeca666ed346dd960263b35bb394d0aa3245aa4bbf1a4b7fd0a
+> 
+> Received:
+> 0002a39a406673bdb1797a5d1c1ad794aa77f694b5b1610ff5a409a02583aef2daf7d9c09e4dd3ff41589230d40525ef3bf9
+> 
+> Processing:
+> 0002a39a406673bdb1797a5d1c1ad794aa77f694b5b1610ff5a409a02583aef2daf7d9c09e4dd3ff41589230d40525ef3bf9
+> 
+> Responding:
+> 00d5fb4d6dfbfc8685b863db272d054d7caa04802902c7355a873951405c8142c0f73643d2966b83fb113ff9cc26f4ea800077b1184c0a0a0834f20fb79a781679ce
+> 
+> Received:
+> bf242757aadaa93bf564873cc22031f224e5d2d2e21cdb7cb14b7430e458e75ad1aaf9ceee014cdcbc498c66
+> 
+> Processing:
+> bf242757aadaa93bf564873cc22031f224e5d2d2e21cdb7cb14b7430e458e75ad1aaf9ceee014cdcbc498c66
+> 
+> Decrypted:
+> 00100002220000022281
+
+#### Process Handshake from LND
 
 ```typescript
 import * as net from 'net';
