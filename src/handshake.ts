@@ -6,6 +6,7 @@ import ecurve = require('ecurve');
 import * as crypto from 'crypto';
 import hkdf from 'js-crypto-hkdf';
 import {Point} from 'ecurve';
+import TransmissionHandler from './transmission_handler';
 
 const debug = debugModule('bolt08:handshake');
 const secp256k1 = ecurve.getCurveByName('secp256k1');
@@ -36,6 +37,8 @@ export default class Handshake {
 	private hash: HandshakeHash;
 	private chainKey: Buffer;
 
+	private txHandler: TransmissionHandler;
+
 	constructor({privateKey = null}: { privateKey?: Buffer }) {
 		if (!privateKey) {
 			privateKey = crypto.randomBytes(32);
@@ -48,6 +51,13 @@ export default class Handshake {
 		this.chainKey = crypto.createHash('sha256').update(protocolName).digest();
 		const prologue = Buffer.from('lightning', 'ascii');
 		this.hash = new HandshakeHash(Buffer.concat([this.chainKey, prologue]));
+	}
+
+	public get transmissionHandler(): TransmissionHandler {
+		if (!this.txHandler) {
+			throw new Error('act 3 must be completed before a transmission handler is available');
+		}
+		return this.txHandler;
 	}
 
 	private assumeRole(role: Role) {
@@ -140,6 +150,8 @@ export default class Handshake {
 		const sendingKey = transmissionKeys.slice(0, 32);
 		const receivingKey = transmissionKeys.slice(32);
 
+		this.txHandler = new TransmissionHandler({sendingKey, receivingKey});
+
 		return Buffer.concat([Buffer.alloc(1, 0), chacha, tag]);
 	}
 
@@ -176,6 +188,8 @@ export default class Handshake {
 		const transmissionKeys = await Handshake.hkdf(this.chainKey, Buffer.alloc(0));
 		const receivingKey = transmissionKeys.slice(0, 32);
 		const sendingKey = transmissionKeys.slice(32);
+
+		this.txHandler = new TransmissionHandler({sendingKey, receivingKey});
 	}
 
 	private async serializeActMessage({actIndex, ephemeralPrivateKey, peerPublicKey}: { actIndex: number, ephemeralPrivateKey: Bigi, peerPublicKey: Point }) {

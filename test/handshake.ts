@@ -3,6 +3,7 @@ import Bigi = require('bigi');
 import chai = require('chai');
 import ecurve = require('ecurve');
 import Handshake from '../src/handshake';
+import TransmissionHandler from '../src/transmission_handler';
 
 const assert = chai.assert;
 const secp256k1 = ecurve.getCurveByName('secp256k1');
@@ -72,18 +73,24 @@ describe('Handshake Tests', () => {
 		// Act 3:
 		{
 			let actThreeMessage;
+			let senderTxHandler: TransmissionHandler;
+			let receiverTxHandler: TransmissionHandler;
 
 			// SEND
 			{
 				actThreeMessage = await senderHandshake.serializeActThree();
 				assert.equal(actThreeMessage.toString('hex'), '00b9e3a702e93e3a9948c2ed6e5fd7590a6e1c3a0344cfc9d5b57357049aa22355361aa02e55a8fc28fef5bd6d71ad0c38228dc68b1c466263b47fdf31e560e139ba');
+				senderTxHandler = senderHandshake.transmissionHandler;
 			}
 
 			// RECEIVE
 			{
 				await receiverHandshake.processActThree(actThreeMessage);
-				// assert.equal(receiverHandshake['hash'].value.toString('hex'), '9d1ffbb639e7e20021d9259491dc7b160aab270fb1339ef135053f6f2cebe9ce');
+				receiverTxHandler = receiverHandshake.transmissionHandler;
 			}
+
+			assert.equal(senderTxHandler.sendingKey.toString('hex'), receiverTxHandler.receivingKey.toString('hex'));
+			assert.equal(receiverTxHandler.sendingKey.toString('hex'), senderTxHandler.receivingKey.toString('hex'));
 		}
 	})
 
