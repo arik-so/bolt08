@@ -27,7 +27,12 @@ handshakeHandler.processActTwo(incomingActTwo);
 However, if you are comfortable with lending the tool some autonomy, you can simply use
 
 ```typescript
-const output = handshakeHandler.actDynamically({role: Role.RECEIVER, incomingBuffer: inputData});
+const output = handshakeHandler.actDynamically({
+	role: Role.RECEIVER,
+	incomingBuffer: inputData, // do not set for first message
+	remotePublicKey: publicKey, // only necessary for handshake initiation
+	ephemeralPrivateKey: ephemeralPrivateKey // optional
+});
 ```
 
 Where `output` will have the properties `responseBuffer`, `unreadBuffer`, and `transmissionHandler`.
