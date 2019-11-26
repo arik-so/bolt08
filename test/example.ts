@@ -31,4 +31,26 @@ describe('Readme Example Tests', () => {
 		const serializedMessage = transmissionHandler.send(message); // serializedMessage is what we send over TCP
 	});
 
+	it('should respond to a handshake', () => {
+		// we initialize a new node instance with a local private key
+		const privateKey = crypto.randomBytes(32);
+		const handshakeHandler = new Handshake({privateKey});
+
+		// @ts-ignore
+		const incomingActOne: Buffer = oracle.receive();
+		handshakeHandler.processActOne(incomingActOne);
+
+		const actTwo = handshakeHandler.serializeActTwo({});
+		// @ts-ignore
+		const incomingActThree = oracle.sendAndReceive(actTwo);
+
+		handshakeHandler.processActThree(incomingActThree);
+
+		// having processed act three, we can now send messages back and forth
+		const transmissionHandler = handshakeHandler.transmissionHandler;
+
+		const message = Buffer.from('Welcome!', 'ascii');
+		const serializedMessage = transmissionHandler.send(message); // serializedMessage is what we send over TCP
+	});
+
 });

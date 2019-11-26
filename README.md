@@ -42,6 +42,31 @@ const message = Buffer.from('Hello World!', 'ascii');
 const serializedMessage = transmissionHandler.send(message); // serializedMessage is what we send over TCP
 ```
 
+### Respond to Handshake
+
+```typescript
+import Handshake from 'bolt08';
+import * as crypto from 'crypto';
+
+// we initialize a new node instance with a local private key
+const privateKey = crypto.randomBytes(32);
+const handshakeHandler = new Handshake({privateKey});
+
+const incomingActOne: Buffer = oracle.receive();
+handshakeHandler.processActOne(incomingActOne);
+
+const actTwo = handshakeHandler.serializeActTwo({});
+const incomingActThree = oracle.sendAndReceive(actTwo);
+
+handshakeHandler.processActThree(incomingActThree);
+
+// having processed act three, we can now send messages back and forth
+const transmissionHandler = handshakeHandler.transmissionHandler;
+
+const message = Buffer.from('Welcome!', 'ascii');
+const serializedMessage = transmissionHandler.send(message); // serializedMessage is what we send over TCP
+```
+
 ## License
 
 MIT
