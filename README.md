@@ -70,8 +70,6 @@ const serializedMessage = transmissionHandler.send(message); // serializedMessag
 ### Interact with an LND Node
 
 You can set up a local TCP server with node and test the connection with a real Lightning node.
-For this setup, we're gonna use a local public key `036360e856310ce5d294e8be33fc807077dc56ac80d95d9cd4ddbd21325eff73f7`,
-and we will initiate the handshake using `lncli`.
 
 #### Initiate Handshake to LND
 
@@ -188,6 +186,10 @@ The output might look something like this:
 
 #### Process Handshake from LND
 
+Alternatively, we can first start listening, and then initiate the handshake using `lncli`. To do so,
+we must know the node's public key beforehand. For this setup, we're gonna use a local public 
+key `036360e856310ce5d294e8be33fc807077dc56ac80d95d9cd4ddbd21325eff73f7`.
+
 ```typescript
 import * as net from 'net';
 import {Socket} from 'net';
@@ -255,11 +257,13 @@ const server = net.createServer(function (client) {
 server.listen(port, '127.0.0.1');
 ```
 
+Now we initiate the handshake using `lncli`.
+
 ```shell script
 lncli connect 036360e856310ce5d294e8be33fc807077dc56ac80d95d9cd4ddbd21325eff73f7@127.0.0.1:10154
 ```
 
-The output might then look something like this:
+The output from Node might then look something like this:
 
 > Received:
 > 00026ef8318ce2124ef03deeb243e28b92befc76db39de95d2809470e9be7ab26fa41b1183c3133c3803c64a271690abb911
