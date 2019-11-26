@@ -1,12 +1,11 @@
-import bigintBuffer = require('bigint-buffer');
 import Bigi = require('bigi');
-import chacha = require('chacha');
 import debugModule = require('debug');
 import ecurve = require('ecurve');
 import * as crypto from 'crypto';
 import {Point} from 'ecurve';
 import TransmissionHandler from './transmission_handler';
 import HKDF from './hkdf';
+import Chacha from './chacha';
 
 const debug = debugModule('bolt08:handshake');
 const secp256k1 = ecurve.getCurveByName('secp256k1');
@@ -130,7 +129,7 @@ export default class Handshake {
 
 		// do the stuff here
 		const temporaryKey = this.temporaryKeys[1]; // from the second act
-		const chacha = Handshake.encryptWithAD(temporaryKey, BigInt(1), this.hash.value, this.publicKey.getEncoded(true));
+		const chacha = Chacha.encrypt(temporaryKey, BigInt(1), this.hash.value, this.publicKey.getEncoded(true));
 		debug('Act 3 chacha: %s', chacha.toString('hex'));
 
 		this.hash.update(chacha);
@@ -140,13 +139,13 @@ export default class Handshake {
 			publicKey: this.remoteEphemeralKey
 		});
 
-		const derivative = Handshake.hkdf(this.chainingKey, sharedSecret);
+		const derivative = HKDF.derive(this.chainingKey, sharedSecret);
 		this.chainingKey = derivative.slice(0, 32);
 		this.temporaryKeys[2] = derivative.slice(32);
 
-		const tag = Handshake.encryptWithAD(this.temporaryKeys[2], BigInt(0), this.hash.value, Buffer.alloc(0));
+		const tag = Chacha.encrypt(this.temporaryKeys[2], BigInt(0), this.hash.value, Buffer.alloc(0));
 
-		const transmissionKeys = Handshake.hkdf(this.chainingKey, Buffer.alloc(0));
+		const transmissionKeys = HKDF.derive(this.chainingKey, Buffer.alloc(0));
 		const sendingKey = transmissionKeys.slice(0, 32);
 		const receivingKey = transmissionKeys.slice(32);
 
@@ -169,7 +168,7 @@ export default class Handshake {
 		const chacha = actThreeMessage.slice(1, 50);
 		const tag = actThreeMessage.slice(50, 66);
 
-		const remotePublicKey = Handshake.decryptWithAD(this.temporaryKeys[1], BigInt(1), this.hash.value, chacha);
+		const remotePublicKey = Chacha.decrypt(this.temporaryKeys[1], BigInt(1), this.hash.value, chacha);
 		this.remotePublicKey = Point.decodeFrom(secp256k1, remotePublicKey);
 
 		this.hash.update(chacha);
@@ -178,14 +177,14 @@ export default class Handshake {
 			publicKey: this.remotePublicKey
 		});
 
-		const derivative = Handshake.hkdf(this.chainingKey, sharedSecret);
+		const derivative = HKDF.derive(this.chainingKey, sharedSecret);
 		this.chainingKey = derivative.slice(0, 32);
 		this.temporaryKeys[2] = derivative.slice(32);
 
 		// make sure the tag checks out
-		Handshake.decryptWithAD(this.temporaryKeys[2], BigInt(0), this.hash.value, tag);
+		Chacha.decrypt(this.temporaryKeys[2], BigInt(0), this.hash.value, tag);
 
-		const transmissionKeys = Handshake.hkdf(this.chainingKey, Buffer.alloc(0));
+		const transmissionKeys = HKDF.derive(this.chainingKey, Buffer.alloc(0));
 		const receivingKey = transmissionKeys.slice(0, 32);
 		const sendingKey = transmissionKeys.slice(32);
 
@@ -203,12 +202,12 @@ export default class Handshake {
 			publicKey: peerPublicKey
 		});
 
-		const derivative = Handshake.hkdf(this.chainingKey, sharedEphemeralSecret);
+		const derivative = HKDF.derive(this.chainingKey, sharedEphemeralSecret);
 		this.chainingKey = derivative.slice(0, 32);
 		const temporaryKey = derivative.slice(32);
 		this.temporaryKeys[actIndex] = temporaryKey;
 
-		const chachaTag = Handshake.encryptWithAD(temporaryKey, BigInt(0), this.hash.value, Buffer.alloc(0));
+		const chachaTag = Chacha.encrypt(temporaryKey, BigInt(0), this.hash.value, Buffer.alloc(0));
 		this.hash.update(chachaTag);
 
 		return Buffer.concat([Buffer.alloc(1, 0), this.ephemeralPublicKey.getEncoded(true), chachaTag]);
@@ -234,12 +233,12 @@ export default class Handshake {
 			publicKey: peerPublicKey
 		});
 
-		const derivative = Handshake.hkdf(this.chainingKey, sharedEphemeralSecret);
+		const derivative = HKDF.derive(this.chainingKey, sharedEphemeralSecret);
 		this.chainingKey = derivative.slice(0, 32);
 		const temporaryKey = derivative.slice(32);
 		this.temporaryKeys[actIndex] = temporaryKey;
 
-		Handshake.decryptWithAD(temporaryKey, BigInt(0), this.hash.value, chachaTag);
+		Chacha.decrypt(temporaryKey, BigInt(0), this.hash.value, chachaTag);
 		this.hash.update(chachaTag);
 		return peerPublicKey;
 	}
@@ -249,56 +248,6 @@ export default class Handshake {
 		const sharedSecret = crypto.createHash('sha256').update(ephemeralSecretPreimage.getEncoded(true)).digest();
 		debug('Shared secret: %s', sharedSecret.toString('hex'));
 		return sharedSecret;
-	}
-
-	public static hkdf(salt: Buffer, ikm: Buffer): Buffer {
-		return HKDF.derive(salt, ikm);
-	}
-
-	/**
-	 * Generate chacha stream
-	 * @param key
-	 * @param nonce
-	 * @param associatedData
-	 * @param plaintext
-	 */
-	public static encryptWithAD(key: Buffer, nonce: bigint, associatedData: Buffer, plaintext: Buffer): Buffer {
-		const encodedNonce = Buffer.alloc(12, 0);
-		// encode the nonce value as a little endian into the last 64 bits
-		bigintBuffer.toBufferLE(nonce, 8).copy(encodedNonce, 4);
-
-		const cipher = chacha.createCipher(key, encodedNonce);
-		cipher.setAAD(associatedData, {plaintextLength: plaintext.length});
-		const output = cipher.update(plaintext);
-		cipher.final();
-
-		return Buffer.concat([output, cipher.getAuthTag()]);
-	}
-
-	/**
-	 * Generate chacha stream
-	 * @param key
-	 * @param nonce
-	 * @param associatedData
-	 * @param ciphertext
-	 */
-	public static decryptWithAD(key: Buffer, nonce: bigint, associatedData: Buffer, ciphertext: Buffer): Buffer {
-		const encodedNonce = Buffer.alloc(12, 0);
-		// encode the nonce value as a little endian into the last 64 bits
-		bigintBuffer.toBufferLE(nonce, 8).copy(encodedNonce, 4);
-
-		const rawCiphertext = ciphertext.slice(0, ciphertext.length - 16);
-		const authenticationTag = ciphertext.slice(rawCiphertext.length);
-
-		const cipher = chacha.createDecipher(key, encodedNonce);
-		cipher.setAAD(associatedData, {plaintextLength: ciphertext.length - 16});
-		cipher.setAuthTag(authenticationTag);
-
-		// this should force the authentication
-		const plaintext = cipher.update(rawCiphertext);
-		cipher.final();
-
-		return plaintext;
 	}
 
 }

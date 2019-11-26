@@ -1,4 +1,5 @@
-import Handshake from './handshake';
+import Chacha from './chacha';
+import HKDF from './hkdf';
 
 export default class TransmissionHandler {
 	private sendingKey: Buffer;
@@ -20,10 +21,10 @@ export default class TransmissionHandler {
 		const lengthBuffer = Buffer.alloc(2);
 		lengthBuffer.writeUInt16BE(length, 0);
 
-		const encryptedLength = Handshake.encryptWithAD(this.sendingKey, BigInt(this.sendingNonce), Buffer.alloc(0), lengthBuffer);
+		const encryptedLength = Chacha.encrypt(this.sendingKey, BigInt(this.sendingNonce), Buffer.alloc(0), lengthBuffer);
 		this.incrementSendingNonce();
 
-		const encryptedMessage = Handshake.encryptWithAD(this.sendingKey, BigInt(this.sendingNonce), Buffer.alloc(0), message);
+		const encryptedMessage = Chacha.encrypt(this.sendingKey, BigInt(this.sendingNonce), Buffer.alloc(0), message);
 		this.incrementSendingNonce();
 
 		return Buffer.concat([encryptedLength, encryptedMessage]);
@@ -31,13 +32,13 @@ export default class TransmissionHandler {
 
 	public receive(undelimitedBuffer: Buffer): Buffer {
 		const encryptedLength = undelimitedBuffer.slice(0, 18);
-		const lengthBuffer = Handshake.decryptWithAD(this.receivingKey, BigInt(this.receivingNonce), Buffer.alloc(0), encryptedLength);
+		const lengthBuffer = Chacha.decrypt(this.receivingKey, BigInt(this.receivingNonce), Buffer.alloc(0), encryptedLength);
 		const length = lengthBuffer.readUInt16BE(0);
 
 		this.incrementReceivingNonce();
 
 		const encryptedMessage = undelimitedBuffer.slice(18, 18 + length + 16);
-		const message = Handshake.decryptWithAD(this.receivingKey, BigInt(this.receivingNonce), Buffer.alloc(0), encryptedMessage);
+		const message = Chacha.decrypt(this.receivingKey, BigInt(this.receivingNonce), Buffer.alloc(0), encryptedMessage);
 
 		this.incrementReceivingNonce();
 
@@ -61,7 +62,7 @@ export default class TransmissionHandler {
 	}
 
 	private rotateKey(key: Buffer): Buffer {
-		const derivative = Handshake.hkdf(this.chainingKey, key);
+		const derivative = HKDF.derive(this.chainingKey, key);
 		this.chainingKey = derivative.slice(0, 32);
 		return derivative.slice(32);
 	}
