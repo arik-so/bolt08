@@ -1,3 +1,3 @@
-class Transmissionhandler {
+class TransmissionHandler {
 
 }
