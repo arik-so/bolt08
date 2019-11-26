@@ -18,27 +18,28 @@ export default class Handshake {
 	private privateKey: Bigi;
 	private publicKey: Point;
 
-	private remotePublicKey: Buffer;
+	private remotePublicKey: Point;
 
 	private hash: HandshakeHash;
 	private chainKey: Buffer;
 
-	constructor({privateKey = null, remotePublicKey}: { privateKey?: Buffer, remotePublicKey: Buffer }) {
+	constructor({privateKey = null}: { privateKey?: Buffer }) {
 		if (!privateKey) {
 			privateKey = crypto.randomBytes(32);
 		}
 		this.privateKey = Bigi.fromBuffer(privateKey);
 		this.publicKey = secp256k1.G.multiply(this.privateKey);
-		this.remotePublicKey = remotePublicKey;
-	}
 
-	public async serializeActOne({ephemeralPrivateKey = null}: { ephemeralPrivateKey?: Buffer }): Promise<Buffer> {
 		// initialize handshake hash
 		const protocolName = Buffer.from('Noise_XK_secp256k1_ChaChaPoly_SHA256', 'ascii');
 		this.chainKey = crypto.createHash('sha256').update(protocolName).digest();
 		const prologue = Buffer.from('lightning', 'ascii');
 		this.hash = new HandshakeHash(Buffer.concat([this.chainKey, prologue]));
-		this.hash.update(this.remotePublicKey);
+	}
+
+	public async serializeActOne({ephemeralPrivateKey = null, remotePublicKey}: { ephemeralPrivateKey?: Buffer, remotePublicKey: Buffer }): Promise<Buffer> {
+		this.remotePublicKey = Point.decodeFrom(secp256k1, remotePublicKey);
+		this.hash.update(this.remotePublicKey.getEncoded(true));
 
 		if (!ephemeralPrivateKey) {
 			ephemeralPrivateKey = crypto.randomBytes(32);
@@ -46,25 +47,55 @@ export default class Handshake {
 		const ephemeralPublicKey = secp256k1.G.multiply(Bigi.fromBuffer(ephemeralPrivateKey));
 		this.hash.update(ephemeralPublicKey.getEncoded(true));
 
-		const ephemeralSecret = Handshake.ecdh({privateKey: ephemeralPrivateKey, publicKey: this.remotePublicKey});
-		const derivative = await Handshake.hkdf(this.chainKey, ephemeralSecret);
+		const sharedEphemeralSecret = Handshake.ecdh({
+			privateKey: ephemeralPrivateKey,
+			publicKey: this.remotePublicKey
+		});
+		const derivative = await Handshake.hkdf(this.chainKey, sharedEphemeralSecret);
 		debug('Act 1 key derivative: %s', derivative.toString('hex'));
 		this.chainKey = derivative.slice(0, 32);
 		const temporaryKey1 = derivative.slice(32);
 
-		const chachaStream = Handshake.encryptWithAD(temporaryKey1, BigInt(0), this.hash.value, '');
-		debug('Act 1 Chacha: %s', chachaStream.toString('hex'));
-		this.hash.update(chachaStream);
-		return Buffer.concat([Buffer.alloc(1, 0), ephemeralPublicKey.getEncoded(true), chachaStream]);
+		const chachaTag = Handshake.encryptWithAD(temporaryKey1, BigInt(0), this.hash.value, '');
+		debug('Act 1 Chacha: %s', chachaTag.toString('hex'));
+		this.hash.update(chachaTag);
+		return Buffer.concat([Buffer.alloc(1, 0), ephemeralPublicKey.getEncoded(true), chachaTag]);
 	}
 
-	public async processActOne() {
+	public async processActOne(actOneMessage: Buffer) {
+		this.hash.update(this.publicKey.getEncoded(true));
 
+		if (actOneMessage.length != 50) {
+			throw new Error('act one message must be 50 bytes');
+		}
+		const version = actOneMessage.slice(0, 1);
+		const ephemeralPublicKey = actOneMessage.slice(1, 34);
+		const chachaTag = actOneMessage.slice(34, 50);
+
+		this.hash.update(ephemeralPublicKey);
+
+		const sharedEphemeralSecret = Handshake.ecdh({
+			privateKey: this.privateKey.toBuffer(32),
+			publicKey: ephemeralPublicKey
+		});
+		const derivative = await Handshake.hkdf(this.chainKey, sharedEphemeralSecret);
+		this.chainKey = derivative.slice(0, 32);
+		const temporaryKey1 = derivative.slice(32);
+
+		Handshake.decryptWithAD(temporaryKey1, BigInt(0), this.hash.value, chachaTag);
+		this.hash.update(chachaTag);
 	}
 
-	private static ecdh({privateKey, publicKey}: { privateKey: Buffer, publicKey: Buffer }) {
-		const publicKeyPoint = Point.decodeFrom(secp256k1, publicKey);
+	private static ecdh({privateKey, publicKey}: { privateKey: Buffer, publicKey: Point | Buffer }) {
 		const privateKeyInteger = Bigi.fromBuffer(privateKey);
+
+		let publicKeyPoint: Point;
+		if (publicKey instanceof Point) {
+			publicKeyPoint = publicKey;
+		} else if (!(publicKey instanceof Point)) {
+			publicKeyPoint = Point.decodeFrom(secp256k1, publicKey);
+		}
+
 		const ephemeralSecretPreimage = publicKeyPoint.multiply(privateKeyInteger);
 		const sharedSecret = crypto.createHash('sha256').update(ephemeralSecretPreimage.getEncoded(true)).digest();
 		debug('Shared secret: %s', sharedSecret.toString('hex'));
@@ -89,10 +120,34 @@ export default class Handshake {
 		bigintBuffer.toBufferLE(nonce, 8).copy(encodedNonce, 4);
 
 		const cipher = chacha.createCipher(key, encodedNonce);
-		cipher.setAAD(associatedData, {plaintextLength: 0});
+		cipher.setAAD(associatedData, {plaintextLength: plaintext.length});
+		const output = cipher.update(plaintext);
 		cipher.final();
 
-		return cipher.getAuthTag();
+		return Buffer.concat([cipher.getAuthTag(), output]);
+	}
+
+	/**
+	 * Generate chacha stream
+	 * @param key
+	 * @param nonce
+	 * @param associatedData
+	 * @param ciphertext
+	 */
+	private static decryptWithAD(key: Buffer, nonce: bigint, associatedData: Buffer, ciphertext: Buffer): Buffer {
+		const encodedNonce = Buffer.alloc(12, 0);
+		// encode the nonce value as a little endian into the last 64 bits
+		bigintBuffer.toBufferLE(nonce, 8).copy(encodedNonce, 4);
+
+		const cipher = chacha.createDecipher(key, encodedNonce);
+		cipher.setAAD(associatedData, {plaintextLength: ciphertext.length - 16});
+		cipher.setAuthTag(ciphertext);
+
+		// this should force the authentication
+		const plaintext = cipher.update(ciphertext.slice(16));
+		cipher.final();
+
+		return plaintext;
 	}
 
 }

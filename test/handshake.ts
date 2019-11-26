@@ -26,20 +26,17 @@ describe('Handshake Tests', () => {
 
 		const ephemeralPrivateKey = Buffer.from('1212121212121212121212121212121212121212121212121212121212121212', 'hex');
 
-		const handshake = new Handshake({
-			privateKey: localPrivateKey,
-			remotePublicKey: remotePublicKey.getEncoded(true)
-		});
+		const handshake = new Handshake({privateKey: localPrivateKey});
 		const actOneMessage = await handshake.serializeActOne({
-			ephemeralPrivateKey: ephemeralPrivateKey
+			ephemeralPrivateKey: ephemeralPrivateKey,
+			remotePublicKey: remotePublicKey.getEncoded(true)
 		});
 		assert.equal(actOneMessage.toString('hex'), '00036360e856310ce5d294e8be33fc807077dc56ac80d95d9cd4ddbd21325eff73f70df6086551151f58b8afe6c195782c6a');
 
 		// the roles are flipped
-		const receiverHandshake = new Handshake({
-			privateKey: remotePrivateKey,
-			remotePublicKey: localPublicKey.getEncoded(true)
-		});
+		const receiverHandshake = new Handshake({privateKey: remotePrivateKey});
+		await receiverHandshake.processActOne(actOneMessage);
+		assert.equal(receiverHandshake['hash'].value.toString('hex'), '9d1ffbb639e7e20021d9259491dc7b160aab270fb1339ef135053f6f2cebe9ce');
 	})
 
 });
