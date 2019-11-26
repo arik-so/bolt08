@@ -53,7 +53,7 @@ export default class Handshake {
 		this.hash = new HandshakeHash(Buffer.concat([this.chainingKey, prologue]));
 	}
 
-	public actDynamically({role, incomingBuffer, ephemeralPrivateKey, remotePublicKey}: { role?: Role, incomingBuffer?: Buffer, ephemeralPrivateKey?: Buffer, remotePublicKey?: Buffer }): { responseBuffer?: Buffer, transmissionHandler?: TransmissionHandler } {
+	public actDynamically({role, incomingBuffer, ephemeralPrivateKey, remotePublicKey}: { role?: Role, incomingBuffer?: Buffer, ephemeralPrivateKey?: Buffer, remotePublicKey?: Buffer }): { responseBuffer?: Buffer, transmissionHandler?: TransmissionHandler, unreadBuffer?: Buffer } {
 		if (!(this.role in Role)) {
 			if (!(role in Role)) {
 				throw new Error('invalid role');
@@ -63,6 +63,7 @@ export default class Handshake {
 			this.nextActIndex = 0;
 		}
 
+		let unreadBuffer: Buffer = null;
 		let responseBuffer: Buffer = null;
 		let txHander: TransmissionHandler;
 
@@ -92,7 +93,9 @@ export default class Handshake {
 				if (!incomingBuffer) {
 					throw new Error('incoming message must be known to receive handshake');
 				}
-				this.processActOne(incomingBuffer);
+
+				unreadBuffer = incomingBuffer.slice(50);
+				this.processActOne(incomingBuffer.slice(0, 50));
 
 				responseBuffer = this.serializeActTwo({ephemeralPrivateKey: this.ephemeralPrivateKey.toBuffer(32)});
 
@@ -103,7 +106,9 @@ export default class Handshake {
 			if (!incomingBuffer) {
 				throw new Error('incoming message must be known to receive handshake');
 			}
-			this.processActTwo(incomingBuffer);
+
+			unreadBuffer = incomingBuffer.slice(50);
+			this.processActTwo(incomingBuffer.slice(0, 50));
 
 			responseBuffer = this.serializeActThree();
 			txHander = this.transmissionHandler;
@@ -112,7 +117,10 @@ export default class Handshake {
 			if (!incomingBuffer) {
 				throw new Error('incoming message must be known to receive handshake');
 			}
-			this.processActThree(incomingBuffer);
+
+			unreadBuffer = incomingBuffer.slice(66);
+			this.processActThree(incomingBuffer.slice(0, 66));
+
 			txHander = this.transmissionHandler;
 			this.nextActIndex = -1; // we are done
 		} else {
@@ -121,6 +129,7 @@ export default class Handshake {
 
 		return {
 			responseBuffer,
+			unreadBuffer,
 			transmissionHandler: txHander
 		};
 	}
