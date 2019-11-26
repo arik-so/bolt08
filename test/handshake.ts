@@ -30,6 +30,7 @@ describe('Handshake Tests', () => {
 		// ACT 1:
 		{
 			let actOneMessage;
+
 			// SEND
 			{
 				const ephemeralPrivateKey = Buffer.from('1212121212121212121212121212121212121212121212121212121212121212', 'hex');
@@ -53,6 +54,7 @@ describe('Handshake Tests', () => {
 		// ACT 2:
 		{
 			let actTwoMessage;
+
 			// SEND
 			{
 				const ephemeralPrivateKey = Buffer.from('2222222222222222222222222222222222222222222222222222222222222222', 'hex');
@@ -64,6 +66,25 @@ describe('Handshake Tests', () => {
 			{
 				await senderHandshake.processActTwo(actTwoMessage);
 				assert.equal(senderHandshake['hash'].value.toString('hex'), '90578e247e98674e661013da3c5c1ca6a8c8f48c90b485c0dfa1494e23d56d72');
+			}
+		}
+
+		// Act 3:
+		{
+			let actThreeMessage;
+
+			// SEND
+			{
+				actThreeMessage = await senderHandshake.serializeActThree();
+				// assert.equal(actOneMessage.toString('hex'), '00036360e856310ce5d294e8be33fc807077dc56ac80d95d9cd4ddbd21325eff73f70df6086551151f58b8afe6c195782c6a');
+			}
+
+			// RECEIVE
+			{
+				// the roles are flipped
+
+				// await receiverHandshake.processActOne(actOneMessage);
+				// assert.equal(receiverHandshake['hash'].value.toString('hex'), '9d1ffbb639e7e20021d9259491dc7b160aab270fb1339ef135053f6f2cebe9ce');
 			}
 		}
 	})
