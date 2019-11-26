@@ -7,6 +7,7 @@
 		"test": "./node_modules/mocha/bin/_mocha ./test",
 		"tsc": "./node_modules/typescript/bin/tsc --build tsconfig.json",
 		"coverage": "./node_modules/.bin/istanbul cover ./node_modules/mocha/bin/_mocha --report lcovonly ./test/ && cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js && rm -rf ./coverage",
+		"posttest": "npm run coverage",
 		"prepublish": "npm run tsc"
 	},
 	"keywords": [
