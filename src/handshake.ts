@@ -10,15 +10,26 @@ import {Point} from 'ecurve';
 const debug = debugModule('bolt08:handshake');
 const secp256k1 = ecurve.getCurveByName('secp256k1');
 
+enum Role {
+	INITIATOR,
+	RECEIVER
+}
+
 /**
  * Protocol for handling the key setup
  */
 export default class Handshake {
 
+	private role?: Role;
+
 	private privateKey: Bigi;
 	private publicKey: Point;
 
+	private ephemeralPrivateKey: Bigi;
+	private ephemeralPublicKey: Point;
+
 	private remotePublicKey: Point;
+	private remoteEphemeralKey: Point;
 
 	private hash: HandshakeHash;
 	private chainKey: Buffer;
@@ -37,66 +48,119 @@ export default class Handshake {
 		this.hash = new HandshakeHash(Buffer.concat([this.chainKey, prologue]));
 	}
 
+	private assumeRole(role: Role) {
+		if (this.role in Role) {
+			throw new Error('roles cannot change!');
+		}
+		this.role = role;
+	}
+
+	private assertRole(role: Role) {
+		if (this.role !== role) {
+			throw new Error('invalid action for role!');
+		}
+	}
+
 	public async serializeActOne({ephemeralPrivateKey = null, remotePublicKey}: { ephemeralPrivateKey?: Buffer, remotePublicKey: Buffer }): Promise<Buffer> {
+		this.assumeRole(Role.INITIATOR);
 		this.remotePublicKey = Point.decodeFrom(secp256k1, remotePublicKey);
 		this.hash.update(this.remotePublicKey.getEncoded(true));
 
 		if (!ephemeralPrivateKey) {
 			ephemeralPrivateKey = crypto.randomBytes(32);
 		}
-		const ephemeralPublicKey = secp256k1.G.multiply(Bigi.fromBuffer(ephemeralPrivateKey));
-		this.hash.update(ephemeralPublicKey.getEncoded(true));
 
-		const sharedEphemeralSecret = Handshake.ecdh({
-			privateKey: ephemeralPrivateKey,
-			publicKey: this.remotePublicKey
+		const ephemeralPrivateKeyInteger = Bigi.fromBuffer(ephemeralPrivateKey);
+		return this.serializeActMessage({
+			ephemeralPrivateKey: ephemeralPrivateKeyInteger,
+			peerPublicKey: this.remotePublicKey
 		});
-		const derivative = await Handshake.hkdf(this.chainKey, sharedEphemeralSecret);
-		debug('Act 1 key derivative: %s', derivative.toString('hex'));
-		this.chainKey = derivative.slice(0, 32);
-		const temporaryKey1 = derivative.slice(32);
-
-		const chachaTag = Handshake.encryptWithAD(temporaryKey1, BigInt(0), this.hash.value, '');
-		debug('Act 1 Chacha: %s', chachaTag.toString('hex'));
-		this.hash.update(chachaTag);
-		return Buffer.concat([Buffer.alloc(1, 0), ephemeralPublicKey.getEncoded(true), chachaTag]);
 	}
 
 	public async processActOne(actOneMessage: Buffer) {
+		this.assumeRole(Role.RECEIVER);
 		this.hash.update(this.publicKey.getEncoded(true));
 
-		if (actOneMessage.length != 50) {
-			throw new Error('act one message must be 50 bytes');
-		}
-		const version = actOneMessage.slice(0, 1);
-		const ephemeralPublicKey = actOneMessage.slice(1, 34);
-		const chachaTag = actOneMessage.slice(34, 50);
+		this.remoteEphemeralKey = await this.processActMessage({
+			actMessage: actOneMessage,
+			localPrivateKey: this.privateKey
+		});
+	}
 
+	public async serializeActTwo({ephemeralPrivateKey = null}: { ephemeralPrivateKey?: Buffer }): Promise<Buffer> {
+		this.assertRole(Role.RECEIVER);
+
+		if (!ephemeralPrivateKey) {
+			ephemeralPrivateKey = crypto.randomBytes(32);
+		}
+
+		const ephemeralPrivateKeyInteger = Bigi.fromBuffer(ephemeralPrivateKey);
+		return this.serializeActMessage({
+			ephemeralPrivateKey: ephemeralPrivateKeyInteger,
+			peerPublicKey: this.remoteEphemeralKey
+		});
+	}
+
+	public async processActTwo(actTwoMessage: Buffer) {
+		this.assertRole(Role.INITIATOR);
+		this.remoteEphemeralKey = await this.processActMessage({
+			actMessage: actTwoMessage,
+			localPrivateKey: this.ephemeralPrivateKey
+		});
+	}
+
+	private async serializeActMessage({ephemeralPrivateKey, peerPublicKey}: { ephemeralPrivateKey: Bigi, peerPublicKey: Point }) {
+		const ephemeralPublicKey = secp256k1.G.multiply(ephemeralPrivateKey);
+		this.ephemeralPrivateKey = ephemeralPrivateKey;
+		this.ephemeralPublicKey = ephemeralPublicKey;
+		this.hash.update(this.ephemeralPublicKey.getEncoded(true));
+
+		const sharedEphemeralSecret = Handshake.ecdh({
+			privateKey: ephemeralPrivateKey,
+			publicKey: peerPublicKey
+		});
+
+		const derivative = await Handshake.hkdf(this.chainKey, sharedEphemeralSecret);
+		this.chainKey = derivative.slice(0, 32);
+		const temporaryKey2 = derivative.slice(32);
+
+		const chachaTag = Handshake.encryptWithAD(temporaryKey2, BigInt(0), this.hash.value, '');
+		this.hash.update(chachaTag);
+
+		return Buffer.concat([Buffer.alloc(1, 0), this.ephemeralPublicKey.getEncoded(true), chachaTag]);
+	}
+
+	private async processActMessage({actMessage, localPrivateKey}: { actMessage: Buffer, localPrivateKey: Bigi }): Promise<Point> {
+		if (actMessage.length != 50) {
+			throw new Error('act one/two message must be 50 bytes');
+		}
+		const version = actMessage.readUInt8(0);
+		if (version !== 0) {
+			throw new Error('unsupported version');
+		}
+
+		const ephemeralPublicKey = actMessage.slice(1, 34);
+		const chachaTag = actMessage.slice(34, 50);
+
+		const peerPublicKey = Point.decodeFrom(secp256k1, ephemeralPublicKey);
 		this.hash.update(ephemeralPublicKey);
 
 		const sharedEphemeralSecret = Handshake.ecdh({
-			privateKey: this.privateKey.toBuffer(32),
-			publicKey: ephemeralPublicKey
+			privateKey: localPrivateKey,
+			publicKey: peerPublicKey
 		});
+
 		const derivative = await Handshake.hkdf(this.chainKey, sharedEphemeralSecret);
 		this.chainKey = derivative.slice(0, 32);
 		const temporaryKey1 = derivative.slice(32);
 
 		Handshake.decryptWithAD(temporaryKey1, BigInt(0), this.hash.value, chachaTag);
 		this.hash.update(chachaTag);
+		return peerPublicKey;
 	}
 
-	private static ecdh({privateKey, publicKey}: { privateKey: Buffer, publicKey: Point | Buffer }) {
-		const privateKeyInteger = Bigi.fromBuffer(privateKey);
-
-		let publicKeyPoint: Point;
-		if (publicKey instanceof Point) {
-			publicKeyPoint = publicKey;
-		} else if (!(publicKey instanceof Point)) {
-			publicKeyPoint = Point.decodeFrom(secp256k1, publicKey);
-		}
-
-		const ephemeralSecretPreimage = publicKeyPoint.multiply(privateKeyInteger);
+	private static ecdh({privateKey, publicKey}: { privateKey: Bigi, publicKey: Point }) {
+		const ephemeralSecretPreimage = publicKey.multiply(privateKey);
 		const sharedSecret = crypto.createHash('sha256').update(ephemeralSecretPreimage.getEncoded(true)).digest();
 		debug('Shared secret: %s', sharedSecret.toString('hex'));
 		return sharedSecret;
