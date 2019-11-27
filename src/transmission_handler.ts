@@ -33,17 +33,30 @@ export default class TransmissionHandler {
 		return Buffer.concat([encryptedLength, encryptedMessage]);
 	}
 
-	public receive(undelimitedBuffer: Buffer): { message: Buffer, unreadBuffer: Buffer } {
+	public receive(undelimitedBuffer: Buffer): { message?: Buffer, unreadBuffer: Buffer } {
 		const encryptedLength = undelimitedBuffer.slice(0, 18);
 		const lengthBuffer = Chacha.decrypt(this.receivingKey, BigInt(this.receivingNonce), Buffer.alloc(0), encryptedLength);
 		const length = lengthBuffer.readUInt16BE(0);
+		const taggedLength = length + 16;
 
-		this.incrementReceivingNonce();
-
-		const lastEncryptedDataIndex = 18 + length + 16;
-		debug('Decrypting Lightning message of length %d (with tag: %d)', length, length + 16);
+		const lastEncryptedDataIndex = 18 + taggedLength;
+		debug('Decrypting Lightning message of length %d (with tag: %d)', length, taggedLength);
 		const encryptedMessage = undelimitedBuffer.slice(18, lastEncryptedDataIndex);
 		debug('Tagged Lightning message: %s', encryptedMessage.toString('hex'));
+
+		// verify I have enough stuff in here
+		if (encryptedMessage.length < taggedLength) {
+			// we do not have enough data
+			debug('Tagged Lightning message: too short, aborting');
+			return {
+				message: null, // we failed to decrypt anything
+				unreadBuffer: undelimitedBuffer
+			}
+		}
+
+		// if so, increment nonce
+		this.incrementReceivingNonce();
+
 		const message = Chacha.decrypt(this.receivingKey, BigInt(this.receivingNonce), Buffer.alloc(0), encryptedMessage);
 
 		this.incrementReceivingNonce();
