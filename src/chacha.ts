@@ -1,5 +1,8 @@
 import bigintBuffer = require('bigint-buffer');
 import chacha = require('chacha');
+import debugModule = require('debug');
+
+const debug = debugModule('bolt08:chacha');
 
 export default class Chacha {
 	/**
@@ -43,7 +46,19 @@ export default class Chacha {
 
 		// this should force the authentication
 		const plaintext = cipher.update(rawCiphertext);
-		cipher.final();
+		try {
+			cipher.final();
+			debug('Decryption success');
+			debug('Nonce: %d', Number(nonce));
+			debug('Tagged ciphertext: %s', taggedCiphertext.toString('hex'));
+		} catch (e) {
+			debug('Decryption failure');
+			debug('Key: %s', key.toString('hex'));
+			debug('Nonce: %d', Number(nonce));
+			debug('Associated data: %s', associatedData.toString('hex'));
+			debug('Tagged ciphertext: %s', taggedCiphertext.toString('hex'));
+			throw e;
+		}
 
 		return plaintext;
 	}
