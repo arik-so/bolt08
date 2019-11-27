@@ -1,5 +1,8 @@
 import Chacha from './chacha';
 import HKDF from './hkdf';
+import debugModule = require('debug');
+
+const debug = debugModule('bolt08:transmission_handler');
 
 export default class TransmissionHandler {
 	private sendingKey: Buffer;
@@ -38,7 +41,9 @@ export default class TransmissionHandler {
 		this.incrementReceivingNonce();
 
 		const lastEncryptedDataIndex = 18 + length + 16;
+		debug('Decrypting Lightning message of length %d (with tag: %d)', length, length + 16);
 		const encryptedMessage = undelimitedBuffer.slice(18, lastEncryptedDataIndex);
+		debug('Tagged Lightning message: %s', encryptedMessage.toString('hex'));
 		const message = Chacha.decrypt(this.receivingKey, BigInt(this.receivingNonce), Buffer.alloc(0), encryptedMessage);
 
 		this.incrementReceivingNonce();

@@ -1,6 +1,6 @@
 {
 	"name": "bolt08",
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"description": "A utility for interfacing with the TCP-based networking protocol outlined in Lightning Network's BOLT 8.",
 	"main": "index.js",
 	"scripts": {
