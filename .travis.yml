@@ -3,6 +3,7 @@ before_script:
   - npm run tsc
 node_js:
   - '10'
+  - '12'
 env:
   global:
     - NODE_ENV=test
