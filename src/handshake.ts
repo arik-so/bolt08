@@ -5,8 +5,7 @@ import * as crypto from 'crypto';
 import {Point} from 'ecurve';
 import TransmissionHandler from './transmission_handler';
 import HKDF from './hkdf';
-import Chacha from 'chacha-poly1305';
-import ChachaNonce from './chacha_nonce';
+import Chacha from './chacha';
 
 const debug = debugModule('bolt08:handshake');
 const secp256k1 = ecurve.getCurveByName('secp256k1');
@@ -215,7 +214,7 @@ export default class Handshake {
 
 		// do the stuff here
 		const temporaryKey = this.temporaryKeys[1]; // from the second act
-		const chacha = Chacha.encrypt(temporaryKey, ChachaNonce.encode(BigInt(1)), this.hash.value, this.publicKey.getEncoded(true));
+		const chacha = Chacha.encrypt(temporaryKey, BigInt(1), this.hash.value, this.publicKey.getEncoded(true));
 		debug('Act 3 chacha: %s', chacha.toString('hex'));
 
 		this.hash.update(chacha);
@@ -229,7 +228,7 @@ export default class Handshake {
 		this.chainingKey = derivative.slice(0, 32);
 		this.temporaryKeys[2] = derivative.slice(32);
 
-		const tag = Chacha.encrypt(this.temporaryKeys[2], ChachaNonce.encode(BigInt(0)), this.hash.value, Buffer.alloc(0));
+		const tag = Chacha.encrypt(this.temporaryKeys[2], BigInt(0), this.hash.value, Buffer.alloc(0));
 
 		const transmissionKeys = HKDF.derive(this.chainingKey, Buffer.alloc(0));
 		const sendingKey = transmissionKeys.slice(0, 32);
@@ -254,7 +253,7 @@ export default class Handshake {
 		const chacha = actThreeMessage.slice(1, 50);
 		const tag = actThreeMessage.slice(50, 66);
 
-		const remotePublicKey = Chacha.decrypt(this.temporaryKeys[1], ChachaNonce.encode(BigInt(1)), this.hash.value, chacha);
+		const remotePublicKey = Chacha.decrypt(this.temporaryKeys[1], BigInt(1), this.hash.value, chacha);
 		this.remotePublicKey = Point.decodeFrom(secp256k1, remotePublicKey);
 
 		this.hash.update(chacha);
@@ -268,7 +267,7 @@ export default class Handshake {
 		this.temporaryKeys[2] = derivative.slice(32);
 
 		// make sure the tag checks out
-		Chacha.decrypt(this.temporaryKeys[2], ChachaNonce.encode(BigInt(0)), this.hash.value, tag);
+		Chacha.decrypt(this.temporaryKeys[2], BigInt(0), this.hash.value, tag);
 
 		const transmissionKeys = HKDF.derive(this.chainingKey, Buffer.alloc(0));
 		const receivingKey = transmissionKeys.slice(0, 32);
@@ -293,7 +292,7 @@ export default class Handshake {
 		const temporaryKey = derivative.slice(32);
 		this.temporaryKeys[actIndex] = temporaryKey;
 
-		const chachaTag = Chacha.encrypt(temporaryKey, ChachaNonce.encode(BigInt(0)), this.hash.value, Buffer.alloc(0));
+		const chachaTag = Chacha.encrypt(temporaryKey, BigInt(0), this.hash.value, Buffer.alloc(0));
 		this.hash.update(chachaTag);
 
 		return Buffer.concat([Buffer.alloc(1, 0), this.ephemeralPublicKey.getEncoded(true), chachaTag]);
@@ -324,7 +323,7 @@ export default class Handshake {
 		const temporaryKey = derivative.slice(32);
 		this.temporaryKeys[actIndex] = temporaryKey;
 
-		Chacha.decrypt(temporaryKey, ChachaNonce.encode(BigInt(0)), this.hash.value, chachaTag);
+		Chacha.decrypt(temporaryKey, BigInt(0), this.hash.value, chachaTag);
 		this.hash.update(chachaTag);
 		return peerPublicKey;
 	}
