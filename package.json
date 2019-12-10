@@ -1,6 +1,6 @@
 {
 	"name": "bolt08",
-	"version": "0.2.4",
+	"version": "0.2.5",
 	"description": "A utility for interfacing with the TCP-based networking protocol outlined in Lightning Network's BOLT 8.",
 	"main": "index.js",
 	"scripts": {
@@ -41,7 +41,7 @@
 	"dependencies": {
 		"bigi": "^1.4.2",
 		"bigint-buffer": "^1.1.5",
-		"chacha-poly1305": "^0.1.0",
+		"chacha-poly1305-wasm": "^0.1.0",
 		"debug": "^4.1.1",
 		"ecurve": "^1.0.6"
 	},
