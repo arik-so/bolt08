@@ -1,6 +1,7 @@
-import Chacha from './chacha';
+import Chacha from 'chacha-poly1305';
 import HKDF from './hkdf';
 import debugModule = require('debug');
+import ChachaNonce from './chacha_nonce';
 
 const debug = debugModule('bolt08:transmission_handler');
 
@@ -24,10 +25,10 @@ export default class TransmissionHandler {
 		const lengthBuffer = Buffer.alloc(2);
 		lengthBuffer.writeUInt16BE(length, 0);
 
-		const encryptedLength = Chacha.encrypt(this.sendingKey, BigInt(this.sendingNonce), Buffer.alloc(0), lengthBuffer);
+		const encryptedLength = Chacha.encrypt(this.sendingKey, ChachaNonce.encode(BigInt(this.sendingNonce)), Buffer.alloc(0), lengthBuffer);
 		this.incrementSendingNonce();
 
-		const encryptedMessage = Chacha.encrypt(this.sendingKey, BigInt(this.sendingNonce), Buffer.alloc(0), message);
+		const encryptedMessage = Chacha.encrypt(this.sendingKey, ChachaNonce.encode(BigInt(this.sendingNonce)), Buffer.alloc(0), message);
 		this.incrementSendingNonce();
 
 		return Buffer.concat([encryptedLength, encryptedMessage]);
@@ -35,7 +36,7 @@ export default class TransmissionHandler {
 
 	public receive(undelimitedBuffer: Buffer): { message?: Buffer, unreadBuffer: Buffer } {
 		const encryptedLength = undelimitedBuffer.slice(0, 18);
-		const lengthBuffer = Chacha.decrypt(this.receivingKey, BigInt(this.receivingNonce), Buffer.alloc(0), encryptedLength);
+		const lengthBuffer = Chacha.decrypt(this.receivingKey, ChachaNonce.encode(BigInt(this.receivingNonce)), Buffer.alloc(0), encryptedLength);
 		const length = lengthBuffer.readUInt16BE(0);
 		const taggedLength = length + 16;
 
@@ -57,7 +58,7 @@ export default class TransmissionHandler {
 		// if so, increment nonce
 		this.incrementReceivingNonce();
 
-		const message = Chacha.decrypt(this.receivingKey, BigInt(this.receivingNonce), Buffer.alloc(0), encryptedMessage);
+		const message = Chacha.decrypt(this.receivingKey, ChachaNonce.encode(BigInt(this.receivingNonce)), Buffer.alloc(0), encryptedMessage);
 
 		this.incrementReceivingNonce();
 

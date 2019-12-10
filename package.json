@@ -41,7 +41,7 @@
 	"dependencies": {
 		"bigi": "^1.4.2",
 		"bigint-buffer": "^1.1.5",
-		"chacha": "^2.1.0",
+		"chacha-poly1305": "^0.1.0",
 		"debug": "^4.1.1",
 		"ecurve": "^1.0.6"
 	},
