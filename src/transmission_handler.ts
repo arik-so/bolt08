@@ -1,4 +1,4 @@
-import Chacha from 'chacha-poly1305';
+import Chacha from 'chacha-poly1305-wasm';
 import HKDF from './hkdf';
 import debugModule = require('debug');
 import ChachaNonce from './chacha_nonce';

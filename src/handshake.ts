@@ -5,7 +5,7 @@ import * as crypto from 'crypto';
 import {Point} from 'ecurve';
 import TransmissionHandler from './transmission_handler';
 import HKDF from './hkdf';
-import Chacha from 'chacha-poly1305';
+import Chacha from 'chacha-poly1305-wasm';
 import ChachaNonce from './chacha_nonce';
 
 const debug = debugModule('bolt08:handshake');
