@@ -18,8 +18,6 @@ describe('Handshake Tests', () => {
 		const remotePrivateKey = Buffer.from('2121212121212121212121212121212121212121212121212121212121212121', 'hex');
 		const remotePublicKey = secp256k1.G.multiply(Bigi.fromBuffer(remotePrivateKey));
 
-		console.log('GHELLO!');
-
 		// ACT 1:
 		// chaining_key: accumulated hash of previous ECDH outputs (whatever exactly that means)
 		// handshake_hash: accumulated hash of all handshake data, sent and received
