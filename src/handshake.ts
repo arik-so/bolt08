@@ -50,8 +50,10 @@ export default class Handshake {
 		// initialize handshake hash
 		const protocolName = Buffer.from('Noise_XK_secp256k1_ChaChaPoly_SHA256', 'ascii');
 		this.chainingKey = crypto.createHash('sha256').update(protocolName).digest();
+		console.log('chaining key:', this.chainingKey.toString('hex'));
 		const prologue = Buffer.from('lightning', 'ascii');
 		this.hash = new HandshakeHash(Buffer.concat([this.chainingKey, prologue]));
+		console.log('prologue hash', this.hash.value.toString('hex'));
 	}
 
 	public actDynamically({role, incomingBuffer, ephemeralPrivateKey, remotePublicKey}: { role?: Role, incomingBuffer?: Buffer, ephemeralPrivateKey?: Buffer, remotePublicKey?: Buffer }): { responseBuffer?: Buffer, transmissionHandler?: TransmissionHandler, unreadBuffer?: Buffer } {
@@ -282,6 +284,8 @@ export default class Handshake {
 		this.ephemeralPrivateKey = ephemeralPrivateKey;
 		this.ephemeralPublicKey = ephemeralPublicKey;
 		this.hash.update(this.ephemeralPublicKey.getEncoded(true));
+
+		console.log('hash', this.hash.value.toString('hex'));
 
 		const sharedEphemeralSecret = Handshake.ecdh({
 			privateKey: ephemeralPrivateKey,

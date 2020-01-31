@@ -8,7 +8,9 @@ const debug = debugModule('bolt08:transmission_handler');
 export default class TransmissionHandler {
 	private sendingKey: Buffer;
 	private receivingKey: Buffer;
-	private chainingKey: Buffer;
+
+	private sendingChainingKey: Buffer;
+	private receivingChainingKey: Buffer;
 
 	private sendingNonce: number = 0;
 	private receivingNonce: number = 0;
@@ -16,7 +18,8 @@ export default class TransmissionHandler {
 	constructor({sendingKey, receivingKey, chainingKey}: { sendingKey: Buffer, receivingKey: Buffer, chainingKey: Buffer }) {
 		this.sendingKey = sendingKey;
 		this.receivingKey = receivingKey;
-		this.chainingKey = chainingKey;
+		this.sendingChainingKey = chainingKey;
+		this.receivingChainingKey = chainingKey;
 	}
 
 	public send(message: Buffer): Buffer {
@@ -69,7 +72,7 @@ export default class TransmissionHandler {
 	private incrementSendingNonce() {
 		this.sendingNonce++;
 		if (this.sendingNonce >= 1000) {
-			this.sendingKey = this.rotateKey(this.sendingKey);
+			this.sendingKey = this.rotateSendingKey(this.sendingKey);
 			this.sendingNonce = 0;
 		}
 	}
@@ -77,14 +80,20 @@ export default class TransmissionHandler {
 	private incrementReceivingNonce() {
 		this.receivingNonce++;
 		if (this.receivingNonce >= 1000) {
-			this.receivingKey = this.rotateKey(this.receivingKey);
+			this.receivingKey = this.rotateReceivingKey(this.receivingKey);
 			this.receivingNonce = 0;
 		}
 	}
 
-	private rotateKey(key: Buffer): Buffer {
-		const derivative = HKDF.derive(this.chainingKey, key);
-		this.chainingKey = derivative.slice(0, 32);
+	private rotateSendingKey(key: Buffer): Buffer {
+		const derivative = HKDF.derive(this.sendingChainingKey, key);
+		this.sendingChainingKey = derivative.slice(0, 32);
+		return derivative.slice(32);
+	}
+
+	private rotateReceivingKey(key: Buffer): Buffer {
+		const derivative = HKDF.derive(this.receivingChainingKey, key);
+		this.receivingChainingKey = derivative.slice(0, 32);
 		return derivative.slice(32);
 	}
 }
